@@ -9,6 +9,7 @@
 #include <Renderer/Mesh.hpp>
 #include <Renderer/RenderContext.hpp>
 #include <Renderer/Shader.hpp>
+#include <Renderer/TextureAttachment.hpp>
 #include <Renderer/TextureSamplerDescriptor.hpp>
 
 #include <array>
@@ -128,6 +129,7 @@ private:
     Renderer::Framebuffer m_blurFramebuffer;                                        //!< The framebuffer used to draw the blur textures.
     std::shared_ptr<Renderer::Sampler> m_blurSampler;                               //!< The blur sampler.
     std::array<std::shared_ptr<Renderer::Texture>, NumBlurTextures> m_blurTextures; //!< The blur textures for each pass.
+    std::array<std::shared_ptr<Renderer::TextureAttachment>, NumBlurTextures> m_blurAttachments; //!< The blur textures as framebuffer attachments, to render into them.
     BlurLevel m_blurLevel{BlurLevel::None};                                         //!< Current blur level.
 };
 

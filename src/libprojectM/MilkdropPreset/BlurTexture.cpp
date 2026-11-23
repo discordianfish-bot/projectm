@@ -18,8 +18,6 @@ BlurTexture::BlurTexture()
     : m_blurMesh(Renderer::VertexBufferUsage::StaticDraw, false, true)
     , m_blurSampler(std::make_shared<Renderer::Sampler>(GL_CLAMP_TO_EDGE, GL_LINEAR))
 {
-    m_blurFramebuffer.CreateColorAttachment(0, 0);
-
     // Initialize blur mesh with a single fullscreen quad.
     m_blurMesh.SetRenderPrimitiveType(Renderer::Mesh::PrimitiveType::TriangleStrip);
 
@@ -177,11 +175,24 @@ void BlurTexture::Update(const Renderer::Texture& sourceTexture, const PerFrameC
         }
         if (!blurShader)
         {
+            m_blurFramebuffer.RemoveColorAttachment(0, 0);
             return;
         }
 
         blurShader->Bind();
         blurShader->SetUniformInt("texture_sampler", 0);
+
+        // Render straight into the blur texture. Drawing into a shared texture
+        // and copying the result out after each pass costs tile-based GPUs an
+        // extra flush and copy per pass. SetAttachment() doesn't replace an
+        // existing attachment, so remove the previous pass' texture first.
+        if (!m_blurAttachments[pass] || m_blurAttachments[pass]->Texture() != m_blurTextures[pass])
+        {
+            m_blurAttachments[pass] = std::make_shared<Renderer::TextureAttachment>(Renderer::TextureAttachment::AttachmentType::Color, 0, 0);
+            m_blurAttachments[pass]->Texture(m_blurTextures[pass]);
+        }
+        m_blurFramebuffer.RemoveColorAttachment(0, 0);
+        m_blurFramebuffer.SetAttachment(0, 0, m_blurAttachments[pass]);
 
         glViewport(0, 0, m_blurTextures[pass]->Width(), m_blurTextures[pass]->Height());
 
@@ -261,12 +272,10 @@ void BlurTexture::Update(const Renderer::Texture& sourceTexture, const PerFrameC
 
         // Draw fullscreen quad
         m_blurMesh.Draw();
-
-        // Save to blur texture
-        m_blurTextures[pass]->Bind(0);
-        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, m_blurTextures[pass]->Width(), m_blurTextures[pass]->Height());
-        m_blurTextures[pass]->Unbind(0);
     }
+
+    // Detach the last blur texture, so it can be sampled without a feedback loop.
+    m_blurFramebuffer.RemoveColorAttachment(0, 0);
 
     Renderer::Mesh::Unbind();
     Renderer::BlendMode::Set(false, Renderer::BlendMode::Function::SourceAlpha, Renderer::BlendMode::Function::OneMinusSourceAlpha);
@@ -349,7 +358,6 @@ void BlurTexture::AllocateTextures(const Renderer::Texture& sourceTexture)
     // The blur textures have no alpha channel. With the default format, they keep the 8-bit RGB
     // format, otherwise they use the format of the main image.
     const bool isDefaultFormat = m_colorFormat == Renderer::ColorFormat();
-    m_blurFramebuffer.SetColorAttachmentFormat(0, 0, m_colorFormat.internalFormat, m_colorFormat.format, m_colorFormat.type);
     m_textureColorFormat = m_colorFormat;
 
     for (size_t i = 0; i < m_blurTextures.size(); i++)
